@@ -1,13 +1,13 @@
 package com.example.demo;
 
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.time.DayOfWeek;
-import java.time.Duration;
-import java.time.LocalTime;
-import java.time.LocalDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -18,60 +18,94 @@ class DemoApplicationTests {
 
     private final static String INVALID_INPUT_MESSAGE = "Invalid input provided";
 
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
-    private static final LocalTime START_WORK_TIME = LocalTime.of(9, 0);
-    private static final LocalTime END_WORK_TIME = LocalTime.of(18, 0);
-    private static final LocalTime LUNCH_START = LocalTime.of(13, 0);
-    private static final LocalTime LUNCH_END = LocalTime.of(14, 0);
+    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    private final DateTimeFormatter time_formatter = DateTimeFormatter.ofPattern("HH:mm");
+    private final LocalTime WORKING_START_TIME = LocalTime.parse("09:00", time_formatter);
+    private final LocalTime WORKING_END_TIME = LocalTime.parse("18:00", time_formatter);
+    private final LocalTime DINNER_START_TIME = LocalTime.parse("13:00", time_formatter);
+    private final LocalTime DINNER_END_TIME = LocalTime.parse("14:00", time_formatter);
 
     long solve(String startDateTime, String endDateTime) {
 
-        LocalDateTime start, end;
+        long result = 0L;
+        LocalDate startDate, endDate;
 
         try {
-            start = LocalDateTime.parse(startDateTime, formatter);
-            end = LocalDateTime.parse(endDateTime, formatter);
+            startDate = LocalDate.parse(startDateTime, formatter);
+            endDate = LocalDate.parse(endDateTime, formatter);
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid input provided");
         }
-
-        if (end.isBefore(start)) {
-            return 0;
+        endDate = endDate.minusDays(1);
+        if (startDate.isBefore(endDate)) {
+            long fullDaysCnt = ChronoUnit.DAYS.between(startDate, endDate);
+            LocalDate tmpDate = startDate.plusDays(1);
+            while (!tmpDate.isAfter(endDate)) {
+                if (tmpDate.getDayOfWeek() == DayOfWeek.SATURDAY || tmpDate.getDayOfWeek() == DayOfWeek.SUNDAY) {
+                    --fullDaysCnt;
+                }
+                tmpDate = tmpDate.plusDays(1);
+            }
+            result += fullDaysCnt * 8 * 60;
         }
+        endDate = endDate.plusDays(1);
 
-        long totalMinutes = 0;
-
-        for (LocalDateTime current = start.withHour(0).withMinute(0).withSecond(0);
-             !current.isAfter(end);
-             current = current.plusDays(1)) {
-
-            if (isWorkingDay(current)) {
-                LocalDateTime dayStart = LocalDateTime.of(current.toLocalDate(), START_WORK_TIME);
-                LocalDateTime dayEnd = LocalDateTime.of(current.toLocalDate(), END_WORK_TIME);
-
-                if (current.toLocalDate().isEqual(start.toLocalDate())) {
-                    dayStart = dayStart.isBefore(start) ? start : dayStart;
+        LocalTime startTime, endTime;
+        try {
+            startTime = LocalTime.parse(startDateTime, formatter);
+            endTime = LocalTime.parse(endDateTime, formatter);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid input provided");
+        }
+        if (startDate.isBefore(endDate)) {
+            if (startDate.getDayOfWeek() != DayOfWeek.SATURDAY && startDate.getDayOfWeek() != DayOfWeek.SUNDAY) {
+                startTime = startTime.isAfter(WORKING_START_TIME) ? startTime : WORKING_START_TIME;
+                if (startTime.isAfter(DINNER_START_TIME)) {
+                    startTime = startTime.isAfter(DINNER_END_TIME) ? startTime : DINNER_END_TIME;
+                } else {
+                    result += Duration.between(startTime, DINNER_START_TIME).toMinutes();
+                    startTime = DINNER_END_TIME;
                 }
-                if (current.toLocalDate().isEqual(end.toLocalDate())) {
-                    dayEnd = dayEnd.isAfter(end) ? end : dayEnd;
+                if (startTime.isBefore(WORKING_END_TIME)) {
+                    result += Duration.between(startTime, WORKING_END_TIME).toMinutes();
                 }
+            }
+            if (endDate.getDayOfWeek() != DayOfWeek.SATURDAY &&
+                    endDate.getDayOfWeek() != DayOfWeek.SUNDAY) {
 
-                if (dayStart.toLocalTime().isAfter(END_WORK_TIME) || dayEnd.toLocalTime().isBefore(START_WORK_TIME)) {
-                    continue;
+                endTime = endTime.isBefore(WORKING_END_TIME) ? endTime : WORKING_END_TIME;
+                if (endTime.isBefore(DINNER_END_TIME)) {
+                    endTime = endTime.isBefore(DINNER_START_TIME) ? endTime : DINNER_START_TIME;
+                } else {
+                    result += Duration.between(DINNER_END_TIME, endTime).toMinutes();
+                    endTime = DINNER_START_TIME;
                 }
+                if (endTime.isAfter(WORKING_START_TIME)) {
+                    result += Duration.between(WORKING_START_TIME, endTime).toMinutes();
+                }
+            }
+        } else if (startDate.isEqual(endDate)) {
+            if (startDate.getDayOfWeek() != DayOfWeek.SATURDAY && startDate.getDayOfWeek() != DayOfWeek.SUNDAY &&
+                    startTime.isBefore(endTime) && !startTime.isAfter(WORKING_END_TIME) && !endTime.isBefore(WORKING_START_TIME)) {
 
-                if (dayStart.toLocalTime().isBefore(START_WORK_TIME)) {
-                    dayStart = LocalDateTime.of(current.toLocalDate(), START_WORK_TIME);
+                startTime = startTime.isAfter(WORKING_START_TIME) ? startTime : WORKING_START_TIME;
+                endTime = endTime.isBefore(WORKING_END_TIME) ? endTime : WORKING_END_TIME;
+                if (startTime.isAfter(DINNER_START_TIME)) {
+                    startTime = startTime.isAfter(DINNER_END_TIME) ? startTime : DINNER_END_TIME;
                 }
-                if (dayEnd.toLocalTime().isAfter(END_WORK_TIME)) {
-                    dayEnd = LocalDateTime.of(current.toLocalDate(), END_WORK_TIME);
+                if (endTime.isBefore(DINNER_END_TIME)) {
+                    endTime = endTime.isBefore(DINNER_START_TIME) ? endTime : DINNER_START_TIME;
                 }
-
-                totalMinutes += calculateMinutesForDay(dayStart, dayEnd);
+                if (startTime.isBefore(endTime)) {
+                    result += Duration.between(startTime, endTime).toMinutes() - 60;
+                    if (!endTime.isAfter(DINNER_START_TIME) || !startTime.isBefore(DINNER_END_TIME)) {
+                        result += 60;
+                    }
+                }
             }
         }
 
-        return totalMinutes;
+        return result;
     }
 
     private static boolean isWorkingDay(LocalDateTime dateTime) {
@@ -79,30 +113,11 @@ class DemoApplicationTests {
         return day != DayOfWeek.SATURDAY && day != DayOfWeek.SUNDAY;
     }
 
-    private static long calculateMinutesForDay(LocalDateTime start, LocalDateTime end) {
-        long workingMinutes = 0;
-
-        if (start.toLocalTime().isBefore(LUNCH_START)) {
-            LocalDateTime lunchStart = LocalDateTime.of(start.toLocalDate(), LUNCH_START);
-            LocalDateTime periodEnd = end.isBefore(lunchStart) ? end : lunchStart;
-            workingMinutes += Duration.between(start, periodEnd).toMinutes();
-        }
-
-        if (end.toLocalTime().isAfter(LUNCH_END)) {
-            LocalDateTime lunchEnd = LocalDateTime.of(start.toLocalDate(), LUNCH_END);
-            LocalDateTime periodStart = start.isAfter(lunchEnd) ? start : lunchEnd;
-            workingMinutes += Duration.between(periodStart, end).toMinutes();
-        }
-
-        return workingMinutes;
-    }
-
-    @Test
+    @ParameterizedTest
     @Order(1)
     @DisplayName("1. test both rough data")
-    void testBothRoughData() {
-        String startTime = "";
-        String endTime = "11.07/2024 10.10";
+    @CsvSource(value = {", 11.07/2024 10.10"})
+    void testBothRoughData(String startTime, String endTime) {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
@@ -121,17 +136,16 @@ class DemoApplicationTests {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
-        DemoApplicationTests service = new DemoApplicationTests();
+        DemoApplicationTests service  new DemoApplicationTests();
         Exception exception = assertThrows(IllegalArgumentException.class, () -> service.solve(startTime, endTime));
         assertEquals(INVALID_INPUT_MESSAGE, exception.getMessage(), info);
     }
 
-    @Test
+    @ParameterizedTest
     @Order(3)
     @DisplayName("3. test logically incorrect input")
-    void testLogicallyIncorrect() {
-        String startTime = "11.07.2024 15:30";
-        String endTime = "11.07.2024 10:10";
+    @CsvSource(value = {"11.07.2024 15:30, 11.07.2024 10:10"})
+    void testLogicallyIncorrect(String startTime, String endTime) {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
@@ -156,12 +170,11 @@ class DemoApplicationTests {
         assertEquals(expected, actual, "Didn't match for outside of working hours");
     }
 
-    @Test
+    @ParameterizedTest
     @Order(5)
     @DisplayName("5. test left overlap with no lunch")
-    void testOverlapLeft() {
-        String startTime = "11.07.2024 08:45";
-        String endTime = "11.07.2024 09:45";
+    @CsvSource(value = {"11.07.2024 08:45, 11.07.2024 09:45"})
+    void testOverlapLeft(String startTime, String endTime) {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
@@ -186,12 +199,11 @@ class DemoApplicationTests {
         assertEquals(expected, actual, "Didn't match for right overlap with no lunch");
     }
 
-    @Test
+    @ParameterizedTest
     @Order(7)
     @DisplayName("7. test full left internal with no lunch")
-    void testFullLeftInterior() {
-        String startTime = "11.07.2024 09:00";
-        String endTime = "11.07.2024 13:00";
+    @CsvSource(value = {"11.07.2024 09:00, 11.07.2024 13:00"})
+    void testFullLeftInterior(String startTime, String endTime) {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
@@ -216,12 +228,11 @@ class DemoApplicationTests {
         assertEquals(expected, actual, "Didn't match for full right internal with no lunch");
     }
 
-    @Test
+    @ParameterizedTest
     @Order(9)
     @DisplayName("9. test full covering interval with lunch")
-    void testFullCoveringLunch() {
-        String startTime = "11.07.2024 01:00";
-        String endTime = "12.07.2024 07:00";
+    @CsvSource(value = {"11.07.2024 01:00, 12.07.2024 07:00"})
+    void testFullCoveringLunch(String startTime, String endTime) {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
