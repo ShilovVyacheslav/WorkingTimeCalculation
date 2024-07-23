@@ -136,7 +136,7 @@ class DemoApplicationTests {
 
         String info = "StartTime: " + startTime + "\n" + "EndTime: " + endTime + "\n";
 
-        DemoApplicationTests service  new DemoApplicationTests();
+        DemoApplicationTests service = new DemoApplicationTests();
         Exception exception = assertThrows(IllegalArgumentException.class, () -> service.solve(startTime, endTime));
         assertEquals(INVALID_INPUT_MESSAGE, exception.getMessage(), info);
     }
